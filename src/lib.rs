@@ -51,7 +51,7 @@ where
                 continue;
             }
 
-            if let Ok((remaining, result)) = LOG_LINE_PARSER.parse(trimmed)
+            if let Ok((remaining, result)) = LogLineParser.parse(trimmed)
                 && remaining.trim().is_empty()
             {
                 return Some(result);

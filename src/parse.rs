@@ -39,8 +39,9 @@ mod stdp {
                 .unwrap_or(remaining.len());
             let value = std::num::NonZeroU32::new(
                 u32::from_str_radix(&remaining[..end_idx], if is_hex { 16 } else { 10 })
-                    .map_err(|_| ())?
-            ).ok_or(())?;
+                    .map_err(|_| ())?,
+            )
+            .ok_or(())?;
 
             Ok((&remaining[end_idx..], value.get()))
         }
@@ -58,9 +59,8 @@ mod stdp {
                 .find_map(|(idx, c)| (!c.is_ascii_digit()).then_some(idx))
                 .unwrap_or(input.len());
 
-            let value = std::num::NonZeroI32::new(
-                input[..end_idx].parse().map_err(|_| ())?
-            ).ok_or(())?;
+            let value =
+                std::num::NonZeroI32::new(input[..end_idx].parse().map_err(|_| ())?).ok_or(())?;
 
             Ok((&input[end_idx..], value.get()))
         }
@@ -720,14 +720,14 @@ pub struct Take<T> {
 impl<T: Parser> Parser for Take<T> {
     type Dest = Vec<T::Dest>;
     fn parse<'a>(&self, input: &'a str) -> Result<(&'a str, Self::Dest), ()> {
-        let mut remaining = input;
-        let mut result = Vec::new();
-        for _ in 0..self.count {
-            let (new_remaining, new_result) = self.parser.parse(remaining)?;
-            result.push(new_result);
-            remaining = new_remaining;
-        }
-        Ok((remaining, result))
+        (0..self.count).try_fold(
+            (input, Vec::with_capacity(self.count)),
+            |(remaining, mut result), _| {
+                let (new_remaining, new_result) = self.parser.parse(remaining)?;
+                result.push(new_result);
+                Ok((new_remaining, result))
+            },
+        )
     }
 }
 /// Конструктор `Take`
@@ -877,11 +877,11 @@ impl Parsable for UserCash {
 }
 /// [Bucket] конкретного пользователя
 #[derive(Debug, Clone, PartialEq)]
-pub struct UserBacket {
+pub struct UserBucket {
     pub user_id: String,
-    pub backet: Bucket,
+    pub bucket: Bucket,
 }
-impl Parsable for UserBacket {
+impl Parsable for UserBucket {
     type Parser = Map<
         Delimited<
             All<(StripWhitespace<Tag>, StripWhitespace<Tag>)>,
@@ -903,7 +903,7 @@ impl Parsable for UserBacket {
                 ),
                 strip_whitespace(tag("}")),
             ),
-            |(user_id, backet)| UserBacket { user_id, backet },
+            |(user_id, bucket)| UserBucket { user_id, bucket },
         )
     }
 }
@@ -938,7 +938,7 @@ impl Parsable for UserBuckets {
                 ),
                 strip_whitespace(tag("}")),
             ),
-            |(user_id, backets)| UserBuckets { user_id, buckets: backets },
+            |(user_id, buckets)| UserBuckets { user_id, buckets },
         )
     }
 }
@@ -1032,8 +1032,8 @@ pub enum AppLogJournalKind {
     },
     DepositCash(UserCash),
     WithdrawCash(UserCash),
-    BuyAsset(UserBacket),
-    SellAsset(UserBacket),
+    BuyAsset(UserBucket),
+    SellAsset(UserBucket),
 }
 impl Parsable for SystemLogErrorKind {
     type Parser = Preceded<
@@ -1273,12 +1273,12 @@ impl Parsable for AppLogJournalKind {
                 fn(UserCash) -> AppLogJournalKind,
             >,
             Map<
-                Preceded<StripWhitespace<Tag>, <UserBacket as Parsable>::Parser>,
-                fn(UserBacket) -> AppLogJournalKind,
+                Preceded<StripWhitespace<Tag>, <UserBucket as Parsable>::Parser>,
+                fn(UserBucket) -> AppLogJournalKind,
             >,
             Map<
-                Preceded<StripWhitespace<Tag>, <UserBacket as Parsable>::Parser>,
-                fn(UserBacket) -> AppLogJournalKind,
+                Preceded<StripWhitespace<Tag>, <UserBucket as Parsable>::Parser>,
+                fn(UserBucket) -> AppLogJournalKind,
             >,
         )>,
     >;
@@ -1352,11 +1352,11 @@ impl Parsable for AppLogJournalKind {
                     AppLogJournalKind::DepositCash,
                 ),
                 map(
-                    preceded(strip_whitespace(tag("BuyAsset")), UserBacket::parser()),
+                    preceded(strip_whitespace(tag("BuyAsset")), UserBucket::parser()),
                     AppLogJournalKind::BuyAsset,
                 ),
                 map(
-                    preceded(strip_whitespace(tag("SellAsset")), UserBacket::parser()),
+                    preceded(strip_whitespace(tag("SellAsset")), UserBucket::parser()),
                     AppLogJournalKind::SellAsset,
                 ),
             ),
@@ -1436,10 +1436,6 @@ impl Parser for LogLineParser {
         <LogLine as Parsable>::parser().parse(input)
     }
 }
-// Подсказка: singleton, без которого можно обойтись.
-// Парсеры не страшно вытащить в pub
-/// Единожды собранный парсер логов
-pub static LOG_LINE_PARSER: LogLineParser = LogLineParser;
 
 #[cfg(test)]
 mod test {
@@ -1657,7 +1653,7 @@ mod test {
     }
 
     #[test]
-    fn test_backet() {
+    fn test_bucket() {
         assert_eq!(
             Bucket::parser().parse(r#"Backet{"asset_id":"usd","count":42,}"#),
             Ok((
@@ -1740,6 +1736,6 @@ mod test {
                 )))
             ))
         );
-        assert_eq!(LogKind::parser().parse(r#"App::Journal BuyAsset UserBacket{"user_id": "Steeve", "backet": Backet{"asset_id":"bayc","count":1,},}"#), Ok(("", LogKind::App(AppLogKind::Journal(AppLogJournalKind::BuyAsset(UserBacket{user_id: "Steeve".into(), backet: Bucket {asset_id: "bayc".into(),count:1}}))))));
+        assert_eq!(LogKind::parser().parse(r#"App::Journal BuyAsset UserBacket{"user_id": "Steeve", "backet": Backet{"asset_id":"bayc","count":1,},}"#), Ok(("", LogKind::App(AppLogKind::Journal(AppLogJournalKind::BuyAsset(UserBucket {user_id: "Steeve".into(), bucket: Bucket {asset_id: "bayc".into(),count:1}}))))));
     }
 }
