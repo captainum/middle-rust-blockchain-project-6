@@ -162,10 +162,8 @@ App::Journal BuyAsset UserBacket{"user_id":"Alice","backet":Backet{"asset_id":"m
 
     #[test]
     fn test_all() {
-        let refcell1: Box<dyn MyReader> = Box::new(SOURCE1.as_bytes());
-        assert_eq!(read_log(refcell1, ReadMode::All, vec![]).len(), 1);
-        let refcell: Box<dyn MyReader> = Box::new(SOURCE.as_bytes());
-        let all_parsed = read_log(refcell, ReadMode::All, vec![]);
+        assert_eq!(read_log(SOURCE1.as_bytes(), ReadMode::All, vec![]).len(), 1);
+        let all_parsed = read_log(SOURCE.as_bytes(), ReadMode::All, vec![]);
         println!("all parsed:");
         all_parsed
             .iter()
