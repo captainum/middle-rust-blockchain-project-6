@@ -54,7 +54,7 @@ fn main() {
     let parsing_demo =
         r#"[UserBackets{"user_id":"Bob","backets":[Backet{"asset_id":"milk","count":3,},],},]"#;
     let announcements =
-        analysis::parse::just_parse::<analysis::parse::UserBackets>(parsing_demo).unwrap();
+        analysis::parse::just_parse::<analysis::parse::UserBuckets>(parsing_demo).unwrap();
     println!("demo-parsed: {:?}", announcements);
 
     let args = std::env::args().collect::<Vec<_>>();
